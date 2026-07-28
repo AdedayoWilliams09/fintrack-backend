@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Environment variables & secrets (NEVER commit these)
+.env
+.env.local
+.env.production
+.env.development
+
+# Logs & Debugging
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+
+# IDEs & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Coverage / Testing output
+coverage/
+.nyc_output/

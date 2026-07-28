@@ -1,0 +1,213 @@
+openapi: 3.0.0
+info:
+  title: FinTrack API
+  description: |
+    Simple Explanation:
+    "This is like a restaurant menu that tells you what dishes (endpoints) are available 
+    and how to order them."
+    
+    Technical Explanation:
+    "This is the OpenAPI specification for the FinTrack backend API. It documents all 
+    available endpoints, request/response formats, and error codes."
+  version: 1.0.0
+  contact:
+    name: FinTrack Team
+    email: support@fintrack.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:5000
+    description: Development Server
+  - url: https://your-backend-url.com
+    description: Production Server
+
+tags:
+  - name: Health
+    description: Service health monitoring endpoints
+  - name: Test
+    description: Connection testing endpoints
+
+paths:
+  /api/health:
+    get:
+      tags:
+        - Health
+      summary: Check service health
+      description: |
+         "Check if the kitchen is open and the fridge is working."
+         "Returns the health status of the server and database connection."
+      operationId: checkHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: OK
+                timestamp: "2026-06-15T10:00:00.000Z"
+                uptime: 123.45
+                mongoConnected: true
+                mongoState: connected
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/test:
+    get:
+      tags:
+        - Test
+      summary: Test API connection
+      description: |
+         "A handshake to make sure the frontend can talk to the backend."
+         "Verifies that the API is accessible and responding correctly."
+      operationId: testConnection
+      parameters:
+        - in: query
+          name: invalid
+          schema:
+            type: string
+          description: "Used for testing validation (should be empty)"
+          example: ""
+      responses:
+        '200':
+          description: Connection successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestResponse'
+              example:
+                success: true
+                message: API connection successful
+                data:
+                  backendStatus: healthy
+                  timestamp: "2026-06-15T10:00:00.000Z"
+                  environment: development
+        '400':
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '500':
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/{path}:
+    get:
+      tags:
+        - "404"
+      summary: Catch-all for undefined routes
+      description: |
+         "This is like a 'room not found' sign for paths that don't exist."
+         "Returns a 404 error for any route that doesn't match existing endpoints."
+      operationId: notFound
+      parameters:
+        - in: path
+          name: path
+          schema:
+            type: string
+          required: true
+          description: The requested path
+          example: unknown
+      responses:
+        '404':
+          description: Route not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotFoundResponse'
+              example:
+                success: false
+                message: Route not found
+                path: /api/unknown
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [OK]
+        timestamp:
+          type: string
+          format: date-time
+        uptime:
+          type: number
+        mongoConnected:
+          type: boolean
+        mongoState:
+          type: string
+          enum: [connected, connecting, disconnected, disconnecting]
+
+    TestResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            backendStatus:
+              type: string
+            timestamp:
+              type: string
+              format: date-time
+            environment:
+              type: string
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: false
+        message:
+          type: string
+
+    ValidationErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: false
+        message:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+              value:
+                type: string
+              msg:
+                type: string
+              path:
+                type: string
+              location:
+                type: string
+
+    NotFoundResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          const: false
+        message:
+          type: string
+        path:
+          type: string
