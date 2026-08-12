@@ -28,16 +28,24 @@ tags:
     description: Service health monitoring endpoints
   - name: Test
     description: Connection testing endpoints
+  - name: Authentication
+    description: User authentication and authorization endpoints
+  - name: "404"
+    description: Not found handler
 
 paths:
+  # ============================================
+  #  HEALTH & TEST ENDPOINTS
+  # ============================================
+  
   /api/health:
     get:
       tags:
         - Health
       summary: Check service health
       description: |
-         "Check if the kitchen is open and the fridge is working."
-         "Returns the health status of the server and database connection."
+        "Check if the kitchen is open and the fridge is working."
+        "Returns the health status of the server and database connection."
       operationId: checkHealth
       responses:
         '200':
@@ -65,8 +73,8 @@ paths:
         - Test
       summary: Test API connection
       description: |
-         "A handshake to make sure the frontend can talk to the backend."
-         "Verifies that the API is accessible and responding correctly."
+        "A handshake to make sure the frontend can talk to the backend."
+        "Verifies that the API is accessible and responding correctly."
       operationId: testConnection
       parameters:
         - in: query
@@ -102,14 +110,436 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  # ============================================
+  #  AUTHENTICATION ENDPOINTS
+  # ============================================
+
+  /api/auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      description: |
+        "This is like signing up for a new account. You give us your name,
+        email, and password, and we create a new account for you."
+        
+        "Creates a new user account with hashed password and returns JWT tokens.
+        Sends a verification email to the user's email address."
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              valid:
+                summary: Valid registration
+                value:
+                  name: John Doe
+                  email: john@example.com
+                  password: Password123!
+                  confirmPassword: Password123!
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                success: true
+                message: User registered successfully. Please verify your email.
+                data:
+                  user:
+                    id: user_123
+                    name: John Doe
+                    email: john@example.com
+                    role: user
+                    isEmailVerified: false
+                  accessToken: eyJhbGciOiJIUzI1NiIs...
+                  refreshToken: eyJhbGciOiJIUzI1NiIs...
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Login user
+      description: |
+        "This is like showing your ID at the door. You give us your email
+        and password, and we check if you're allowed in."
+        
+        "Authenticates user credentials and returns JWT tokens upon success.
+        Implements rate limiting (5 attempts per 15 minutes) and account lockout
+        after 5 failed attempts."
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              valid:
+                summary: Valid credentials
+                value:
+                  email: john@example.com
+                  password: Password123!
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                success: true
+                message: Login successful
+                data:
+                  user:
+                    id: user_123
+                    name: John Doe
+                    email: john@example.com
+                    role: user
+                    isEmailVerified: true
+                  accessToken: eyJhbGciOiJIUzI1NiIs...
+                  refreshToken: eyJhbGciOiJIUzI1NiIs...
+        '401':
+          description: Invalid credentials or account locked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                message: Invalid email or password
+        '429':
+          description: Too many attempts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/verify-email/{token}:
+    get:
+      tags:
+        - Authentication
+      summary: Verify email address
+      description: |
+        "This checks the special link we sent to your email to confirm
+        that you really own that email address."
+        
+        "Verifies user's email address using the verification token.
+        Tokens expire after 24 hours."
+      operationId: verifyEmail
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Email verification token sent to user's email
+          example: abc123def456ghi789
+      responses:
+        '200':
+          description: Email verified successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                success: true
+                message: Email verified successfully
+        '400':
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                message: Invalid or expired verification token
+
+  /api/auth/forgot-password:
+    post:
+      tags:
+        - Authentication
+      summary: Request password reset
+      description: |
+        "If you forget your password, you can ask us to send a special link
+        to your email that lets you create a new one."
+        
+        "Generates a password reset token and sends it to the user's email.
+        Rate limited to 3 requests per hour. Does not reveal if email exists
+        for security reasons."
+      operationId: forgotPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ForgotPasswordRequest'
+            examples:
+              valid:
+                summary: Valid email
+                value:
+                  email: john@example.com
+      responses:
+        '200':
+          description: Request processed (even if email not found)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                success: true
+                message: If an account exists with this email, a reset link will be sent.
+        '429':
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/reset-password/{token}:
+    post:
+      tags:
+        - Authentication
+      summary: Reset password
+      description: |
+        "You use the special link we sent to create a new password."
+        
+        "Resets the user's password using a valid reset token.
+        Tokens expire after 1 hour. Password must be at least 8 characters."
+      operationId: resetPassword
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Password reset token sent to user's email
+          example: abc123def456ghi789
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequest'
+            examples:
+              valid:
+                summary: Valid password reset
+                value:
+                  password: NewPassword123!
+                  confirmPassword: NewPassword123!
+      responses:
+        '200':
+          description: Password reset successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                success: true
+                message: Password reset successful
+        '400':
+          description: Invalid or expired token or validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/refresh:
+    post:
+      tags:
+        - Authentication
+      summary: Refresh access token
+      description: |
+        "This gets you a new ID card when your old one expires."
+        
+        "Generates a new access token using a valid refresh token.
+        Refresh tokens are long-lived (7 days) and rotate on each use."
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+            examples:
+              valid:
+                summary: Valid refresh token
+                value:
+                  refreshToken: eyJhbGciOiJIUzI1NiIs...
+      responses:
+        '200':
+          description: New access token generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshTokenResponse'
+              example:
+                success: true
+                data:
+                  accessToken: eyJhbGciOiJIUzI1NiIs...
+        '401':
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Get current user
+      description: |
+        "This tells you who you are based on your ID card."
+        
+        "Returns the authenticated user's profile data.
+        Requires a valid JWT access token."
+      operationId: getCurrentUser
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User data retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+              example:
+                success: true
+                data:
+                  user:
+                    id: user_123
+                    name: John Doe
+                    email: john@example.com
+                    role: user
+                    isEmailVerified: true
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/profile:
+    put:
+      tags:
+        - Authentication
+      summary: Update user profile
+      description: |
+        "This lets you change your name or preferences."
+        
+        "Updates the authenticated user's profile information.
+        Fields are optional - only provided fields will be updated."
+      operationId: updateProfile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+            examples:
+              valid:
+                summary: Update name and preferences
+                value:
+                  name: John Updated
+                  currency: EUR
+                  preferences:
+                    theme: dark
+                    dateFormat: DD/MM/YYYY
+      responses:
+        '200':
+          description: Profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+              example:
+                success: true
+                message: Profile updated successfully
+                data:
+                  user:
+                    id: user_123
+                    name: John Updated
+                    email: john@example.com
+                    role: user
+                    currency: EUR
+                    preferences:
+                      theme: dark
+                      dateFormat: DD/MM/YYYY
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: Logout user
+      description: |
+        "This signs you out of the system."
+        
+        "Logs out the current user. Client should clear tokens from localStorage.
+        Requires a valid JWT access token."
+      operationId: logout
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logged out successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+              example:
+                success: true
+                message: Logged out successfully
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================
+  #  404 HANDLER
+  # ============================================
+
   /api/{path}:
     get:
       tags:
         - "404"
       summary: Catch-all for undefined routes
       description: |
-         "This is like a 'room not found' sign for paths that don't exist."
-         "Returns a 404 error for any route that doesn't match existing endpoints."
+        "This is like a 'room not found' sign for paths that don't exist."
+        "Returns a 404 error for any route that doesn't match existing endpoints."
       operationId: notFound
       parameters:
         - in: path
@@ -131,8 +561,20 @@ paths:
                 message: Route not found
                 path: /api/unknown
 
+# ============================================
+#  COMPONENTS / SCHEMAS
+# ============================================
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Enter your JWT access token (starts with 'eyJ...')
+
   schemas:
+    # ---- Health & Test ----
     HealthResponse:
       type: object
       properties:
@@ -168,6 +610,181 @@ components:
             environment:
               type: string
 
+    # ---- Authentication Requests ----
+    RegisterRequest:
+      type: object
+      required:
+        - name
+        - email
+        - password
+        - confirmPassword
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 50
+          example: John Doe
+        email:
+          type: string
+          format: email
+          example: john@example.com
+        password:
+          type: string
+          minLength: 8
+          example: Password123!
+        confirmPassword:
+          type: string
+          example: Password123!
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: john@example.com
+        password:
+          type: string
+          example: Password123!
+
+    ForgotPasswordRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          example: john@example.com
+
+    ResetPasswordRequest:
+      type: object
+      required:
+        - password
+        - confirmPassword
+      properties:
+        password:
+          type: string
+          minLength: 8
+          example: NewPassword123!
+        confirmPassword:
+          type: string
+          example: NewPassword123!
+
+    RefreshTokenRequest:
+      type: object
+      required:
+        - refreshToken
+      properties:
+        refreshToken:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIs...
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 50
+          example: John Updated
+        currency:
+          type: string
+          example: EUR
+        preferences:
+          type: object
+          properties:
+            theme:
+              type: string
+              enum: [light, dark, system]
+            dateFormat:
+              type: string
+              example: DD/MM/YYYY
+
+    # ---- Authentication Responses ----
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [user, admin]
+        isEmailVerified:
+          type: boolean
+        currency:
+          type: string
+        preferences:
+          type: object
+          properties:
+            theme:
+              type: string
+              enum: [light, dark, system]
+            dateFormat:
+              type: string
+
+    AuthResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            user:
+              $ref: '#/components/schemas/User'
+            accessToken:
+              type: string
+              example: eyJhbGciOiJIUzI1NiIs...
+            refreshToken:
+              type: string
+              example: eyJhbGciOiJIUzI1NiIs...
+
+    UserResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            user:
+              $ref: '#/components/schemas/User'
+
+    MessageResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+
+    RefreshTokenResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            accessToken:
+              type: string
+              example: eyJhbGciOiJIUzI1NiIs...
+
+    # ---- Error Responses ----
     ErrorResponse:
       type: object
       properties:
@@ -190,15 +807,9 @@ components:
           items:
             type: object
             properties:
-              type:
+              field:
                 type: string
-              value:
-                type: string
-              msg:
-                type: string
-              path:
-                type: string
-              location:
+              message:
                 type: string
 
     NotFoundResponse:

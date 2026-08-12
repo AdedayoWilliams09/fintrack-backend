@@ -145,6 +145,48 @@ Error: Access to XMLHttpRequest at 'http://localhost:5000/api/test' from origin 
 
 Solution: Check FRONTEND_URL in .env matches your frontend URL.
 
+
+
+
+## Domain 1: Authentication & Authorization
+
+### Overview
+Complete authentication system with user registration, login, email verification, password reset, and JWT-based session management.
+
+### Features Implemented
+-  User registration with password hashing
+-  User login with JWT authentication
+-  Email verification flow (tokens expire after 24 hours)
+-  Password reset flow (tokens expire after 1 hour)
+-  JWT access tokens (15-minute expiry)
+-  JWT refresh tokens (7-day expiry)
+-  Rate limiting (register: 3/hr, login: 5/15min, forgot: 3/hr)
+-  Account lockout (5 failed attempts = 15min lock)
+-  Role-based access control (user/admin)
+
+### API Endpoints
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/auth/register` | Register new user |
+| POST | `/api/auth/login` | Login user |
+| GET | `/api/auth/verify-email/:token` | Verify email |
+| POST | `/api/auth/forgot-password` | Request password reset |
+| POST | `/api/auth/reset-password/:token` | Reset password |
+| POST | `/api/auth/refresh` | Refresh access token |
+| GET | `/api/auth/me` | Get current user |
+| PUT | `/api/auth/profile` | Update profile |
+| POST | `/api/auth/logout` | Logout |
+
+### Environment Variables
+```env
+PORT=5000
+MONGODB_URI=mongodb://localhost:27017/fintrack
+JWT_SECRET=your-super-secret-jwt-key
+JWT_ACCESS_EXPIRE=15m
+JWT_REFRESH_EXPIRE=7d
+BCRYPT_ROUNDS=10
+CLIENT_URL=http://localhost:5173
+
 Related Repositories
 
 - Frontend Repository
